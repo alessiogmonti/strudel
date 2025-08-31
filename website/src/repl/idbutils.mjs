@@ -188,3 +188,18 @@ export async function uploadSamplesToDB(config, files) {
     openDB(config, onOpened);
   });
 }
+
+// Save a single Blob into the samples DB with a provided title and id
+export async function saveSampleBlobToDB(title, blob, id, config = userSamplesDBConfig) {
+  return new Promise((resolve, reject) => {
+    try {
+      openDB(config, (objectStore, _db) => {
+        objectStore.put({ id, title, blob });
+        resolve();
+      });
+    } catch (e) {
+      console.error(e);
+      reject(e);
+    }
+  });
+}

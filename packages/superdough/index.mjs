@@ -11,3 +11,4 @@ export * from './synth.mjs';
 export * from './zzfx.mjs';
 export * from './logger.mjs';
 export * from './dspworklet.mjs';
+// recording helpers are re-exported from superdough.mjs

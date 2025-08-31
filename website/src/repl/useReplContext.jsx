@@ -36,6 +36,8 @@ import { getRandomTune, initCode, loadModules, shareCode } from './util.mjs';
 import './Repl.css';
 import { setInterval, clearInterval } from 'worker-timers';
 import { getMetadata } from '../metadata_parser';
+import { startRecording, stopRecording } from '@strudel/webaudio';
+import { saveSampleBlobToDB } from './idbutils.mjs';
 
 const { latestCode, maxPolyphony, audioDeviceName, multiChannelOrbits } = settingsMap.get();
 let modulesLoading, presets, drawContext, clearCanvas, audioReady;
@@ -63,7 +65,7 @@ async function getModule(name) {
 const initialCode = `// LOADING`;
 
 export function useReplContext() {
-  const { isSyncEnabled, audioEngineTarget } = useSettings();
+  const { isSyncEnabled, audioEngineTarget, recordOnNextPlay } = useSettings();
   const shouldUseWebaudio = audioEngineTarget !== audioEngineTargets.osc;
   const defaultOutput = shouldUseWebaudio ? webaudioOutput : superdirtOutput;
   const getTime = shouldUseWebaudio ? getAudioContextCurrentTime : getPerformanceTimeSeconds;
@@ -153,6 +155,10 @@ export function useReplContext() {
   const { started, isDirty, error, activeCode, pending } = replState;
   const editorRef = useRef();
   const containerRef = useRef();
+  const [recording, setRecording] = useState(false);
+  const [lastRecordingUrl, setLastRecordingUrl] = useState();
+  const [recordings, setRecordings] = useState([]); // [{ url, createdAt, size, mimeType }]
+  const [patternRecordings, setPatternRecordings] = useState({}); // id -> [{url, createdAt, size, mimeType}]
 
   // this can be simplified once SettingsTab has been refactored to change codemirrorSettings directly!
   // this will be the case when the main repl is being replaced
@@ -177,6 +183,18 @@ export function useReplContext() {
   };
 
   const handleTogglePlay = async () => {
+    const next = !started;
+    // If recordOnNextPlay is armed, begin recording on the next start
+    if (next && recordOnNextPlay && !recording) {
+      try {
+        await audioReady;
+        startRecording();
+        setRecording(true);
+        logger('[repl] ⏺ recording started');
+        settingsMap.setKey('recordOnNextPlay', false);
+      } catch {}
+    }
+    // Do not auto-stop/save on stop; user will press Stop Recording
     editorRef.current?.toggle();
   };
 
@@ -215,6 +233,78 @@ export function useReplContext() {
   };
 
   const handleShare = async () => shareCode(replState.code);
+  const handleArmRecordOnNextPlay = () => {
+    settingsMap.setKey('recordOnNextPlay', true);
+    logger('[repl] ⏺ will start recording on next play');
+  };
+
+  const handleStopAndSaveRecording = async () => {
+    try {
+      const blob = await stopRecording();
+      const url = URL.createObjectURL(blob);
+      setLastRecordingUrl(url);
+      setRecording(false);
+      setRecordings((list) =>
+        [{ url, createdAt: Date.now(), size: blob.size, mimeType: blob.type }, ...list].slice(0, 10),
+      );
+      const viewing = getViewingPatternData();
+      const pid = viewing?.id;
+      if (pid) {
+        setPatternRecordings((prev) => {
+          const curr = prev[pid] || [];
+          const next = [{ url, createdAt: Date.now(), size: blob.size, mimeType: blob.type }, ...curr].slice(0, 10);
+          return { ...prev, [pid]: next };
+        });
+      }
+      logger('[repl] ⏹ recording saved');
+    } catch (e) {
+      setRecording(false);
+      logger('[repl] failed to stop recording', 'error');
+    }
+  };
+  const handleDownloadRecording = () => {
+    if (!lastRecordingUrl) return;
+    const a = document.createElement('a');
+    a.href = lastRecordingUrl;
+    a.download = 'strudel-recording.webm';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+  const handleDownloadFromList = (url) => {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'strudel-recording.webm';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+  const handlePersistRecording = async (url) => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const now = new Date();
+      const title = `recording-${now.toISOString().replace(/[:.]/g, '-')}.webm`;
+      const id = `recordings/${title}`;
+      await saveSampleBlobToDB(title, blob, id);
+      logger('[repl] 💾 recording saved to samples DB', 'success');
+    } catch (e) {
+      logger('[repl] failed to persist recording', 'error');
+      console.error(e);
+    }
+  };
+  const handleDeleteRecording = (patternId, url) => {
+    setRecordings((list) => list.filter((r) => r.url !== url));
+    if (patternId) {
+      setPatternRecordings((prev) => {
+        const curr = prev[patternId] || [];
+        return { ...prev, [patternId]: curr.filter((r) => r.url !== url) };
+      });
+    }
+    try {
+      URL.revokeObjectURL(url);
+    } catch {}
+  };
   const context = {
     started,
     pending,
@@ -224,6 +314,15 @@ export function useReplContext() {
     handleUpdate,
     handleShuffle,
     handleShare,
+    handleArmRecordOnNextPlay,
+    handleStopAndSaveRecording,
+    handleDownloadRecording,
+    recording,
+    recordings,
+    patternRecordings,
+    handleDownloadFromList,
+    handlePersistRecording,
+    handleDeleteRecording,
     handleEvaluate,
     init,
     error,

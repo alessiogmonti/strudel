@@ -297,6 +297,90 @@ export function initializeAudioOutput() {
   destinationGain.connect(audioContext.destination);
 }
 
+// Recording helpers (tap the mixed output via MediaStreamDestination)
+let recordDestination;
+let mediaRecorder;
+let recordChunks = [];
+let recordMimeType;
+
+function ensureRecordDestination() {
+  const ac = getAudioContext();
+  if (!destinationGain) {
+    initializeAudioOutput();
+  }
+  if (!recordDestination) {
+    recordDestination = ac.createMediaStreamDestination();
+    // tap the post-merger gain so we record the full mix
+    destinationGain.connect(recordDestination);
+  }
+  return recordDestination;
+}
+
+export function isRecording() {
+  return !!mediaRecorder && mediaRecorder.state === 'recording';
+}
+
+export function getRecordingStream() {
+  return ensureRecordDestination()?.stream;
+}
+
+export function startRecording(options = {}) {
+  const { mimeTypeCandidates = ['audio/webm;codecs=opus', 'audio/webm', ''], timeslice } = options;
+  const stream = ensureRecordDestination().stream;
+  if (isRecording()) {
+    throw new Error('Recording already in progress');
+  }
+  let chosen;
+  for (const candidate of mimeTypeCandidates) {
+    if (!candidate || (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported?.(candidate))) {
+      chosen = candidate;
+      break;
+    }
+  }
+  try {
+    mediaRecorder = chosen ? new MediaRecorder(stream, { mimeType: chosen }) : new MediaRecorder(stream);
+  } catch (err) {
+    mediaRecorder = new MediaRecorder(stream);
+  }
+  recordChunks = [];
+  recordMimeType = mediaRecorder.mimeType || chosen || 'audio/webm';
+  mediaRecorder.ondataavailable = (evt) => {
+    if (evt.data && evt.data.size > 0) {
+      recordChunks.push(evt.data);
+    }
+  };
+  mediaRecorder.start(timeslice);
+  return { mimeType: recordMimeType };
+}
+
+export function stopRecording() {
+  return new Promise((resolve) => {
+    if (!mediaRecorder) {
+      resolve(new Blob([], { type: recordMimeType || 'audio/webm' }));
+      return;
+    }
+    const chunksRef = recordChunks;
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(chunksRef, { type: recordMimeType || 'audio/webm' });
+      resolve(blob);
+    };
+    if (mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+    } else {
+      mediaRecorder.onstop?.();
+    }
+  });
+}
+
+export function cancelRecording() {
+  try {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+    }
+  } catch {}
+  recordChunks = [];
+}
+
 // input: AudioNode, channels: ?Array<int>
 export const connectToDestination = (input, channels = [0, 1]) => {
   const ctx = getAudioContext();

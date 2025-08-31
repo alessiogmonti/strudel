@@ -1,5 +1,7 @@
 import PlayCircleIcon from '@heroicons/react/20/solid/PlayCircleIcon';
 import StopCircleIcon from '@heroicons/react/20/solid/StopCircleIcon';
+import MicIcon from './icons/Mic.jsx';
+import MicOffIcon from './icons/MicOff.jsx';
 import cx from '@src/cx.mjs';
 import { useSettings, setIsZen } from '../../settings.mjs';
 import '../Repl.css';
@@ -8,10 +10,22 @@ const { BASE_URL } = import.meta.env;
 const baseNoTrailing = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
 
 export function Header({ context, embedded = false }) {
-  const { started, pending, isDirty, activeCode, handleTogglePlay, handleEvaluate, handleShuffle, handleShare } =
-    context;
+  const {
+    started,
+    pending,
+    isDirty,
+    activeCode,
+    handleTogglePlay,
+    handleEvaluate,
+    handleShuffle,
+    handleShare,
+    handleStopAndSaveRecording,
+    recording,
+    handleArmRecordOnNextPlay,
+    settingsMap,
+  } = context;
   const isEmbedded = typeof window !== 'undefined' && (embedded || window.location !== window.parent.location);
-  const { isZen, isButtonRowHidden, isCSSAnimationDisabled, fontFamily } = useSettings();
+  const { isZen, isButtonRowHidden, isCSSAnimationDisabled, fontFamily, recordOnNextPlay } = useSettings();
 
   return (
     <header
@@ -82,6 +96,40 @@ export function Header({ context, embedded = false }) {
               <>loading...</>
             )}
           </button>
+          {(() => {
+            const isArmed = !recording && recordOnNextPlay;
+            const stateLabel = recording ? 'end' : isArmed ? (started ? 'ready' : 'on') : 'start';
+            const title = recording
+              ? 'stop & save recording'
+              : isArmed
+                ? 'armed: record on next play'
+                : 'record on next play';
+            const onClick = () => {
+              if (recording) {
+                handleStopAndSaveRecording();
+              } else if (isArmed) {
+                settingsMap?.setKey?.('recordOnNextPlay', false);
+              } else {
+                handleArmRecordOnNextPlay();
+              }
+            };
+            return (
+              <button
+                title={title}
+                aria-pressed={isArmed || recording}
+                className={cx('flex items-center space-x-2', !isEmbedded ? 'p-2' : 'px-2', 'hover:opacity-75')}
+                onClick={onClick}
+              >
+                {recording ? (
+                  <MicOffIcon className="w-6 h-6 text-foreground" />
+                ) : (
+                  <MicIcon className={cx('w-6 h-6', isArmed ? 'text-red-500' : 'opacity-50')} />
+                )}
+                <span className="text-sm">{stateLabel}</span>
+              </button>
+            );
+          })()}
+          {/* stop is integrated into the same button when recording */}
           <button
             onClick={handleEvaluate}
             title="update"

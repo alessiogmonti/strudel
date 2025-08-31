@@ -41,6 +41,8 @@ export const defaultSettings = {
   isCSSAnimationDisabled: false,
   maxPolyphony: 128,
   multiChannelOrbits: false,
+  recordOnPlay: false,
+  recordOnNextPlay: false,
 };
 
 let search = null;
@@ -87,6 +89,8 @@ export function useSettings() {
     isPanelOpen: parseBoolean(state.isPanelOpen),
     userPatterns: userPatterns,
     multiChannelOrbits: parseBoolean(state.multiChannelOrbits),
+    recordOnPlay: parseBoolean(state.recordOnPlay),
+    recordOnNextPlay: parseBoolean(state.recordOnNextPlay),
   };
 }
 
@@ -95,6 +99,8 @@ export const setPanelPinned = (bool) => settingsMap.setKey('isPanelPinned', bool
 export const setIsPanelOpened = (bool) => settingsMap.setKey('isPanelOpen', bool);
 
 export const setIsZen = (active) => settingsMap.setKey('isZen', !!active);
+export const setRecordOnPlay = (active) => settingsMap.setKey('recordOnPlay', !!active);
+export const setRecordOnNextPlay = (active) => settingsMap.setKey('recordOnNextPlay', !!active);
 
 const patternSetting = (key) =>
   register(key, (value, pat) =>

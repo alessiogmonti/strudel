@@ -19,7 +19,7 @@ import { useState } from 'react';
 import { useDebounce } from '../usedebounce.jsx';
 import cx from '@src/cx.mjs';
 
-export function PatternLabel({ pattern } /* : { pattern: Tables<'code'> } */) {
+export function PatternLabel({ pattern, children } /* : { pattern: Tables<'code'> } */) {
   const meta = useMemo(() => getMetadata(pattern.code), [pattern]);
 
   let title = meta.title;
@@ -36,22 +36,74 @@ export function PatternLabel({ pattern } /* : { pattern: Tables<'code'> } */) {
   return <>{`${pattern.id}: ${title} by ${author.slice(0, 100)}`.slice(0, 60)}</>;
 }
 
-function PatternButton({ showOutline, onClick, pattern, showHiglight }) {
+function PatternButton({ showOutline, onClick, pattern, showHiglight, context }) {
   return (
-    <a
-      className={cx(
-        'mr-4 hover:opacity-50 cursor-pointer block',
-        showOutline && 'outline outline-1',
-        showHiglight && 'bg-selection',
-      )}
-      onClick={onClick}
-    >
-      <PatternLabel pattern={pattern} />
-    </a>
+    <div className="mr-4 block">
+      <div className="flex items-center justify-between gap-2 relative">
+        <a
+          className={cx(
+            'hover:opacity-50 cursor-pointer inline-block flex-1 min-w-0',
+            showOutline && 'outline outline-1',
+            showHiglight && 'bg-selection',
+          )}
+          onClick={onClick}
+        >
+          <PatternLabel pattern={pattern} />
+        </a>
+        {!!context?.patternRecordings?.[pattern.id]?.length && (
+          <div className="relative" onClick={(e) => e.stopPropagation()}>
+            <details>
+              <summary className="text-xs cursor-pointer hover:opacity-70 px-1">recordings</summary>
+              <div className="absolute right-0 mt-1 bg-background text-foreground shadow-md border border-lineHighlight p-2 z-[300] max-h-64 overflow-auto min-w-[240px] rounded-md">
+                {context.patternRecordings[pattern.id].map((r, idx) => (
+                  <div key={idx} className="flex items-center justify-between space-x-2 py-1">
+                    <span className="text-[10px] opacity-80 truncate">
+                      {new Date(r.createdAt).toLocaleTimeString()} • {(r.size / 1024).toFixed(0)} KB
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="text-[12px] hover:opacity-75"
+                        title="download"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          context.handleDownloadFromList(r.url);
+                        }}
+                      >
+                        ⬇️
+                      </button>
+                      <button
+                        className="text-[12px] hover:opacity-75"
+                        title="save to samples"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          context.handlePersistRecording(r.url);
+                        }}
+                      >
+                        💾
+                      </button>
+                      <button
+                        className="text-[12px] hover:opacity-75 text-red-600"
+                        title="delete"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          context.handleDeleteRecording(pattern.id, r.url);
+                        }}
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </details>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
-function PatternButtons({ patterns, activePattern, onClick, started }) {
+function PatternButtons({ patterns, activePattern, onClick, started, context }) {
   const viewingPatternStore = useViewingPatternData();
   const viewingPatternData = parseJSON(viewingPatternStore);
   const viewingPatternID = viewingPatternData.id;
@@ -68,6 +120,7 @@ function PatternButtons({ patterns, activePattern, onClick, started }) {
               showHiglight={id === viewingPatternID}
               showOutline={id === activePattern && started}
               onClick={() => onClick(id)}
+              context={context}
             />
           );
         })}
@@ -155,6 +208,7 @@ function UserPatterns({ context }) {
           started={context.started}
           activePattern={activePattern}
           viewingPatternID={viewingPatternID}
+          context={context}
         />
         {/* )} */}
       </div>
