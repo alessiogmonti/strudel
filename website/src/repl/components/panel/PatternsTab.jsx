@@ -18,6 +18,9 @@ import { Pagination } from '../pagination/Pagination.jsx';
 import { useState } from 'react';
 import { useDebounce } from '../usedebounce.jsx';
 import cx from '@src/cx.mjs';
+import ArrowDownTrayIcon from '@heroicons/react/20/solid/ArrowDownTrayIcon';
+import BookmarkIcon from '@heroicons/react/20/solid/BookmarkIcon';
+import TrashIcon from '@heroicons/react/20/solid/TrashIcon';
 
 export function PatternLabel({ pattern, children } /* : { pattern: Tables<'code'> } */) {
   const meta = useMemo(() => getMetadata(pattern.code), [pattern]);
@@ -62,34 +65,37 @@ function PatternButton({ showOutline, onClick, pattern, showHiglight, context })
                     </span>
                     <div className="flex items-center gap-2">
                       <button
-                        className="text-[12px] hover:opacity-75"
+                        className="hover:opacity-75 text-foreground"
                         title="download"
+                        aria-label="download"
                         onClick={(e) => {
                           e.stopPropagation();
                           context.handleDownloadFromList(r.url);
                         }}
                       >
-                        ⬇️
+                        <ArrowDownTrayIcon className="w-4 h-4" />
                       </button>
                       <button
-                        className="text-[12px] hover:opacity-75"
+                        className="hover:opacity-75 text-foreground"
                         title="save to samples"
+                        aria-label="save to samples"
                         onClick={(e) => {
                           e.stopPropagation();
                           context.handlePersistRecording(r.url);
                         }}
                       >
-                        💾
+                        <BookmarkIcon className="w-4 h-4" />
                       </button>
                       <button
-                        className="text-[12px] hover:opacity-75 text-red-600"
+                        className="hover:opacity-75 text-red-600"
                         title="delete"
+                        aria-label="delete"
                         onClick={(e) => {
                           e.stopPropagation();
                           context.handleDeleteRecording(pattern.id, r.url);
                         }}
                       >
-                        🗑️
+                        <TrashIcon className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
