@@ -302,6 +302,11 @@ let recordDestination;
 let mediaRecorder;
 let recordChunks = [];
 let recordMimeType;
+// WAV path
+let wavWorkletNode;
+let wavBuffers;
+let wavResolve;
+let wavRecording = false;
 
 function ensureRecordDestination() {
   const ac = getAudioContext();
@@ -379,6 +384,131 @@ export function cancelRecording() {
     }
   } catch {}
   recordChunks = [];
+}
+
+// WAV recording (AudioWorklet) — captures float buffers and encodes WAV on main thread
+export function startWavRecording() {
+  const ac = getAudioContext();
+  if (!destinationGain) initializeAudioOutput();
+  if (wavRecording) throw new Error('WAV recording already in progress');
+  wavBuffers = [];
+  const node = new AudioWorkletNode(ac, 'wav-recorder', { numberOfInputs: 1, numberOfOutputs: 0 });
+  destinationGain.connect(node);
+  node.port.onmessage = (evt) => {
+    const { type, buffers } = evt.data || {};
+    if (type === 'chunk' && buffers) {
+      wavBuffers.push(buffers);
+    }
+  };
+  wavWorkletNode = node;
+  wavRecording = true;
+}
+
+export function stopWavRecording() {
+  return new Promise((resolve) => {
+    if (!wavRecording || !wavWorkletNode) {
+      resolve(new Blob());
+      return;
+    }
+    try {
+      destinationGain.disconnect(wavWorkletNode);
+    } catch {}
+    const ac = getAudioContext();
+    const sampleRate = ac.sampleRate;
+    const interleaved = interleaveWavBuffers(wavBuffers);
+    const wavBlob = encodeWav(interleaved, sampleRate, interleaved.numChannels);
+    wavBuffers = [];
+    wavWorkletNode = null;
+    wavRecording = false;
+    resolve(wavBlob);
+  });
+}
+
+export function isWavRecording() {
+  return wavRecording === true;
+}
+
+function interleaveWavBuffers(chunks) {
+  // chunks: Array< Array<Float32Array per channel> >
+  const numChannels = chunks[0]?.length || 2;
+  const channelData = new Array(numChannels).fill(null).map(() => []);
+  let totalFrames = 0;
+  for (const buffers of chunks) {
+    for (let ch = 0; ch < numChannels; ch++) {
+      channelData[ch].push(buffers[ch]);
+    }
+    totalFrames += buffers[0].length;
+  }
+  // Concatenate per-channel
+  const merged = channelData.map((parts) => {
+    const out = new Float32Array(parts.reduce((n, a) => n + a.length, 0));
+    let offset = 0;
+    for (const part of parts) {
+      out.set(part, offset);
+      offset += part.length;
+    }
+    return out;
+  });
+  // Interleave
+  const interleaved = new Float32Array(totalFrames * numChannels);
+  for (let i = 0; i < totalFrames; i++) {
+    for (let ch = 0; ch < numChannels; ch++) {
+      interleaved[i * numChannels + ch] = merged[ch][i] || 0;
+    }
+  }
+  interleaved.numChannels = numChannels;
+  return interleaved;
+}
+
+function encodeWav(float32Data, sampleRate, numChannels = 2) {
+  // 16-bit PCM WAV
+  const numFrames = float32Data.length / numChannels;
+  const bytesPerSample = 2;
+  const blockAlign = numChannels * bytesPerSample;
+  const byteRate = sampleRate * blockAlign;
+  const dataSize = numFrames * blockAlign;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  let offset = 0;
+  function writeString(s) {
+    for (let i = 0; i < s.length; i++) view.setUint8(offset + i, s.charCodeAt(i));
+    offset += s.length;
+  }
+  function writeUint32(v) {
+    view.setUint32(offset, v, true);
+    offset += 4;
+  }
+  function writeUint16(v) {
+    view.setUint16(offset, v, true);
+    offset += 2;
+  }
+
+  // RIFF header
+  writeString('RIFF');
+  writeUint32(36 + dataSize);
+  writeString('WAVE');
+  // fmt chunk
+  writeString('fmt ');
+  writeUint32(16); // PCM
+  writeUint16(1); // format = 1 (PCM)
+  writeUint16(numChannels);
+  writeUint32(sampleRate);
+  writeUint32(byteRate);
+  writeUint16(blockAlign);
+  writeUint16(16); // bits per sample
+  // data chunk
+  writeString('data');
+  writeUint32(dataSize);
+
+  // audio samples
+  const clamp = (x) => Math.max(-1, Math.min(1, x));
+  for (let i = 0; i < float32Data.length; i++) {
+    const s = Math.round(clamp(float32Data[i]) * 32767);
+    view.setInt16(offset, s, true);
+    offset += 2;
+  }
+  return new Blob([buffer], { type: 'audio/wav' });
 }
 
 // input: AudioNode, channels: ?Array<int>

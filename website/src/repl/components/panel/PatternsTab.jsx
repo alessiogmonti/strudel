@@ -19,7 +19,8 @@ import { useState } from 'react';
 import { useDebounce } from '../usedebounce.jsx';
 import cx from '@src/cx.mjs';
 import ArrowDownTrayIcon from '@heroicons/react/20/solid/ArrowDownTrayIcon';
-import BookmarkIcon from '@heroicons/react/20/solid/BookmarkIcon';
+import ArchiveBoxArrowDownIcon from '@heroicons/react/20/solid/ArchiveBoxArrowDownIcon';
+import ArchiveBoxXMarkIcon from '@heroicons/react/20/solid/ArchiveBoxXMarkIcon';
 import TrashIcon from '@heroicons/react/20/solid/TrashIcon';
 
 export function PatternLabel({ pattern, children } /* : { pattern: Tables<'code'> } */) {
@@ -77,14 +78,18 @@ function PatternButton({ showOutline, onClick, pattern, showHiglight, context })
                       </button>
                       <button
                         className="hover:opacity-75 text-foreground"
-                        title="save to samples"
-                        aria-label="save to samples"
+                        title="save locally"
+                        aria-label="save locally"
                         onClick={(e) => {
                           e.stopPropagation();
                           context.handlePersistRecording(r.url);
                         }}
                       >
-                        <BookmarkIcon className="w-4 h-4" />
+                        {context.isRecordingPersisted?.(r.url) ? (
+                          <ArchiveBoxXMarkIcon className="w-4 h-4" />
+                        ) : (
+                          <ArchiveBoxArrowDownIcon className="w-4 h-4" />
+                        )}
                       </button>
                       <button
                         className="hover:opacity-75 text-red-600"

@@ -36,7 +36,7 @@ import { getRandomTune, initCode, loadModules, shareCode } from './util.mjs';
 import './Repl.css';
 import { setInterval, clearInterval } from 'worker-timers';
 import { getMetadata } from '../metadata_parser';
-import { startRecording, stopRecording } from '@strudel/webaudio';
+import { startWavRecording, stopWavRecording } from '@strudel/webaudio';
 import { saveSampleBlobToDB } from './idbutils.mjs';
 
 const { latestCode, maxPolyphony, audioDeviceName, multiChannelOrbits } = settingsMap.get();
@@ -159,6 +159,7 @@ export function useReplContext() {
   const [lastRecordingUrl, setLastRecordingUrl] = useState();
   const [recordings, setRecordings] = useState([]); // [{ url, createdAt, size, mimeType }]
   const [patternRecordings, setPatternRecordings] = useState({}); // id -> [{url, createdAt, size, mimeType}]
+  const [persistedMap, setPersistedMap] = useState({}); // url -> true when saved locally
 
   // this can be simplified once SettingsTab has been refactored to change codemirrorSettings directly!
   // this will be the case when the main repl is being replaced
@@ -188,7 +189,7 @@ export function useReplContext() {
     if (next && recordOnNextPlay && !recording) {
       try {
         await audioReady;
-        startRecording();
+        startWavRecording();
         setRecording(true);
         logger('[repl] ⏺ recording started');
         settingsMap.setKey('recordOnNextPlay', false);
@@ -240,7 +241,7 @@ export function useReplContext() {
 
   const handleStopAndSaveRecording = async () => {
     try {
-      const blob = await stopRecording();
+      const blob = await stopWavRecording();
       const url = URL.createObjectURL(blob);
       setLastRecordingUrl(url);
       setRecording(false);
@@ -266,7 +267,7 @@ export function useReplContext() {
     if (!lastRecordingUrl) return;
     const a = document.createElement('a');
     a.href = lastRecordingUrl;
-    a.download = 'strudel-recording.webm';
+    a.download = 'strudel-recording.wav';
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -274,7 +275,7 @@ export function useReplContext() {
   const handleDownloadFromList = (url) => {
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'strudel-recording.webm';
+    a.download = 'strudel-recording.wav';
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -284,9 +285,10 @@ export function useReplContext() {
       const res = await fetch(url);
       const blob = await res.blob();
       const now = new Date();
-      const title = `recording-${now.toISOString().replace(/[:.]/g, '-')}.webm`;
+      const title = `recording-${now.toISOString().replace(/[:.]/g, '-')}.wav`;
       const id = `recordings/${title}`;
       await saveSampleBlobToDB(title, blob, id);
+      setPersistedMap((m) => ({ ...m, [url]: true }));
       logger('[repl] 💾 recording saved to samples DB', 'success');
     } catch (e) {
       logger('[repl] failed to persist recording', 'error');
@@ -322,6 +324,7 @@ export function useReplContext() {
     patternRecordings,
     handleDownloadFromList,
     handlePersistRecording,
+    isRecordingPersisted: (url) => !!persistedMap[url],
     handleDeleteRecording,
     handleEvaluate,
     init,

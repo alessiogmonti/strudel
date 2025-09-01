@@ -672,6 +672,36 @@ class PhaseVocoderProcessor extends OLAProcessor {
 
 registerProcessor('phase-vocoder-processor', PhaseVocoderProcessor);
 
+// WAV recorder: captures input buffers and posts to main thread for encoding
+class WavRecorderProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.started = false;
+  }
+  process(inputs) {
+    const input = inputs[0];
+    // input[c][n]
+    if (!input || input.length === 0 || input[0] === undefined) {
+      if (this.started) return false;
+      return true;
+    }
+    this.started = true;
+    const numChannels = input.length;
+    const frames = input[0].length || 0;
+    // Copy channel data to new Float32Array per channel to transfer
+    const buffers = new Array(numChannels);
+    for (let ch = 0; ch < numChannels; ch++) {
+      const src = input[ch];
+      const copy = new Float32Array(frames);
+      copy.set(src);
+      buffers[ch] = copy;
+    }
+    this.port.postMessage({ type: 'chunk', buffers, frames, sampleRate });
+    return true;
+  }
+}
+registerProcessor('wav-recorder', WavRecorderProcessor);
+
 // Adapted from https://www.musicdsp.org/en/latest/Effects/221-band-limited-pwm-generator.html
 class PulseOscillatorProcessor extends AudioWorkletProcessor {
   constructor() {

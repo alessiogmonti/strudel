@@ -98,7 +98,7 @@ export function Header({ context, embedded = false }) {
           </button>
           {(() => {
             const isArmed = !recording && recordOnNextPlay;
-            const stateLabel = recording ? 'end' : isArmed ? (started ? 'ready' : 'on') : 'start';
+            const stateLabel = recording ? 'end' : isArmed ? (started ? 'ready' : 'ready') : 'record';
             const title = recording
               ? 'stop & save recording'
               : isArmed
@@ -117,15 +117,15 @@ export function Header({ context, embedded = false }) {
               <button
                 title={title}
                 aria-pressed={isArmed || recording}
-                className={cx('flex items-center space-x-2', !isEmbedded ? 'p-2' : 'px-2', 'hover:opacity-75')}
+                className={cx('flex items-center space-x-1', !isEmbedded ? 'p-1' : 'px-1', 'hover:opacity-75')}
                 onClick={onClick}
               >
                 {recording ? (
-                  <MicOffIcon className="w-6 h-6 text-foreground" />
+                  <MicOffIcon className="w-[22px] h-[22px] text-foreground" />
                 ) : (
-                  <MicIcon className={cx('w-6 h-6', isArmed ? 'text-red-500' : 'opacity-50')} />
+                  <MicIcon className={cx('w-[22px] h-[22px]', isArmed ? 'text-red-500' : 'text-foreground')} />
                 )}
-                <span className="text-sm">{stateLabel}</span>
+                <span className=" inline-block text-left">{stateLabel}</span>
               </button>
             );
           })()}
